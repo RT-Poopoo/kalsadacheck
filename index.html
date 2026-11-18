@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>KalsadaCheck – Simulation</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&display=swap">
+<style>
+:root{--bg:#e8ebed;--panel:#f7f8f8;--tx:#1b1d20;--mut:#5d636b;--bd:#c9cfd4;--road:#2a2c30;--yel:#c99a00;--good:#2f9e62;--fair:#d9a400;--poor:#e0701a;--bad:#d1343e;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#16181b;--panel:#202327;--tx:#eceef0;--mut:#9aa1a9;--bd:#363b41;--road:#0d0e10;--yel:#f2c230;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#16181b;--panel:#202327;--tx:#eceef0;--mut:#9aa1a9;--bd:#363b41;--road:#0d0e10;--yel:#f2c230;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px);height:100%}
+body{margin:0;min-height:100%;background:var(--bg);color:var(--tx);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);background:var(--bg);z-index:10}
+main{max-width:980px;margin:0 auto;padding:20px 16px 40px}
+h1,h2,.num{font-family:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;letter-spacing:.01em}
+h1{font-size:2.3rem;line-height:1.05;margin:0 0 6px}
+h2{font-size:1.35rem;margin:0 0 8px}
+.sub{color:var(--mut);max-width:62ch;margin:0 0 18px}
+.road{background:var(--panel);border:1px solid var(--bd);border-radius:6px;padding:14px 14px 8px;margin-bottom:14px}
+.scroll{overflow-x:auto}
+svg{display:block;min-width:700px;width:100%;height:auto}
+svg text{font:600 13px system-ui,sans-serif;fill:var(--tx)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:.85rem;color:var(--mut);margin:6px 0 4px}
+.legend i{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+.ctl{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;margin-bottom:14px}
+button{font:600 1rem system-ui,sans-serif;padding:10px 16px;border-radius:6px;border:1px solid var(--tx);background:var(--tx);color:var(--bg);cursor:pointer}
+button.alt{background:transparent;color:var(--tx);border-color:var(--bd)}
+button:focus-visible,input:focus-visible{outline:3px solid var(--yel);outline-offset:2px}
+label{display:flex;align-items:center;gap:10px;font-size:.95rem}
+input[type=range]{width:150px;accent-color:var(--yel)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.stat{border-left:4px solid var(--yel);padding:2px 0 2px 10px}
+.stat .num{font-size:2rem;font-weight:700;line-height:1}
+.stat span{font-size:.85rem;color:var(--mut)}
+table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--bd)}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--bd)}
+th{font-size:.85rem;color:var(--mut);font-weight:600}
+.chip{display:inline-block;min-width:58px;text-align:center;padding:2px 10px;border-radius:4px;font-weight:700;color:#fff}
+.chip.Fair{color:#1b1d20}
+.note{font-size:.85rem;color:var(--mut);margin-top:12px;max-width:75ch}
+.bar{height:12px;background:var(--bd);border-radius:6px;overflow:hidden;margin:4px 0 10px}
+#lbar{height:100%;width:0;background:var(--yel)}
+.live p{margin:6px 0}
+</style>
+</head>
+<body>
+<main>
+<h1>KalsadaCheck</h1>
+<p class="sub">Simulation of one 800 m local road. Each trip feels the bumps it drives over. A bump becomes a defect only when enough separate trips agree, and each 100 m section gets a grade.</p>
+
+<div class="ctl">
+  <button id="add">Add a trip</button>
+  <button id="run" class="alt">Run 8 trips</button>
+  <button id="reset" class="alt">Reset</button>
+  <label>Trips needed to confirm <input id="need" type="range" min="1" max="6" value="3"><b id="needv">3</b></label>
+</div>
+
+<div class="road">
+  <h2>Road view</h2>
+  <div class="scroll"><svg id="map" viewBox="0 0 800 170" role="img" aria-label="Road with detected bumps and section grades"></svg></div>
+  <div class="legend">
+    <span><i style="background:none;border:2px solid var(--mut)"></i>Bump felt by one trip</span>
+    <span><i style="background:var(--bad)"></i>Confirmed defect</span>
+    <span><i style="background:var(--yel);border-radius:0;clip-path:polygon(50% 0,100% 100%,0 100%)"></i>Known feature (ignored)</span>
+  </div>
+</div>
+
+<div class="stats" id="stats"></div>
+
+<h2>Worst sections first</h2>
+<table><thead><tr><th>Section</th><th>Grade</th><th>Confirmed defects</th><th>Score</th></tr></thead><tbody id="rank"></tbody></table>
+
+<p class="note">Demo values only: the bump sizes, the 8 m matching distance and the grade cut-offs are not engineering-validated. Known features (speed hump, rail crossing) are tagged in advance so they are not counted as defects, because every trip would hit them.</p>
+<section class="road live" style="margin-top:22px">
+<h2>Live phone capture</h2>
+<p class="sub" style="margin-bottom:10px">Mount the phone fixed in a holder, then ride or drive. The motion sensor and GPS record bumps. Readings are scaled down at higher speeds, since the same hole feels harsher when you go faster.</p>
+<div class="ctl"><button id="lstart">Start live capture</button><button id="lsim" class="alt">Simulate a bump</button><button id="lsync" class="alt">Sync to LGU</button><label>Bump threshold <input id="lthr" type="range" min="2" max="10" step=".5" value="4"><b id="lthrv">4</b></label></div>
+<div class="bar"><div id="lbar"></div></div>
+<p>Vibration: <b id="lread">0.0 m/s²</b>. Speed: <b id="lspd">no speed</b>. <span id="lcount"></span></p>
+<p id="lmsg" class="note" role="status">Not capturing yet.</p>
+<div class="scroll"><table><thead><tr><th>Time</th><th>Size</th><th>Speed</th><th>Position</th></tr></thead><tbody id="llog"></tbody></table></div>
+</section>
+</main>
+<script>
+const SEC=8,LEN=100;
+// Hidden ground truth: real potholes (x in metres, severity 1-3) and known road features
+const POT=[[130,1],[305,2],[322,1],[340,3],[365,2],[420,2],[470,1],[510,3],[525,2],[540,3],[560,1],[575,2],[590,3],[640,1],[720,2],[755,3],[780,1]].map(([x,s])=>({x,s}));
+const KNOWN=[{x:230,n:"Speed hump"},{x:450,n:"Rail crossing"}];
+const COL={Good:"var(--good)",Fair:"var(--fair)",Poor:"var(--poor)",Bad:"var(--bad)"};
+let trips=0;
+function rng(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function genTrip(i){
+  const r=rng(7000+i*97),b=[];
+  POT.forEach(p=>{if(r()<.75)b.push({x:p.x+(r()-.5)*6,m:p.s*.8+r()*.4,t:i})});      // rider may miss a pothole
+  KNOWN.forEach(k=>b.push({x:k.x+(r()-.5)*4,m:1.5,t:i}));                             // fixed features are felt every trip
+  for(let s=0;s<SEC;s++)if(r()<.2)b.push({x:s*LEN+r()*LEN,m:1+r()*1.2,t:i});          // one-off jolts
+  return b;
+}
+const near=(x,list)=>list.some(p=>Math.abs(p.x-x)<=8);
+function grade(sc){return sc===0?"Good":sc<=2?"Fair":sc<=6?"Poor":"Bad"}
+function compute(){
+  const need=+document.getElementById("need").value;
+  let all=[];for(let i=0;i<trips;i++)all.push(...genTrip(i));
+  all.sort((a,b)=>a.x-b.x);
+  const cl=[];all.forEach(b=>{const c=cl[cl.length-1];(c&&b.x-c.last<=6)?(c.b.push(b),c.last=b.x):cl.push({b:[b],last:b.x})});
+  const conf=[];
+  cl.forEach(c=>{
+    const x=c.b.reduce((s,v)=>s+v.x,0)/c.b.length,m=c.b.reduce((s,v)=>s+v.m,0)/c.b.length;
+    if(near(x,KNOWN))return;
+    if(new Set(c.b.map(v=>v.t)).size>=need)conf.push({x,w:m>=2.2?3:m>=1.4?2:1});
+  });
+  const secs=[...Array(SEC)].map((_,i)=>({i,n:0,sc:0}));
+  conf.forEach(c=>{const s=secs[Math.min(SEC-1,Math.floor(c.x/LEN))];s.n++;s.sc+=c.w});
+  secs.forEach(s=>s.g=grade(s.sc));
+  const rawFalse=all.filter(b=>!near(b.x,POT)).length;
+  const confFalse=conf.filter(c=>!near(c.x,POT)).length;
+  const found=POT.filter(p=>conf.some(c=>Math.abs(c.x-p.x)<=8)).length;
+  return{all,conf,secs,rawFalse,confFalse,found};
+}
+function render(){
+  const d=compute();
+  document.getElementById("needv").textContent=document.getElementById("need").value;
+  let s="";
+  d.secs.forEach(c=>{s+=`<rect x="${c.i*LEN}" y="62" width="${LEN}" height="40" fill="${trips?COL[c.g]:"var(--road)"}" opacity="${trips?.85:1}"/><rect x="${c.i*LEN}" y="62" width="${LEN}" height="40" fill="none" stroke="var(--panel)" stroke-width="2"/><text x="${c.i*LEN+LEN/2}" y="124" text-anchor="middle">S${c.i+1}${trips?" · "+c.g:""}</text>`});
+  s+=`<line x1="0" y1="82" x2="800" y2="82" stroke="var(--yel)" stroke-width="2" stroke-dasharray="14 12" opacity=".7"/>`;
+  KNOWN.forEach(k=>{s+=`<polygon points="${k.x},64 ${k.x-8},50 ${k.x+8},50" fill="var(--yel)"/><text x="${k.x}" y="42" text-anchor="middle">${k.n}</text>`});
+  d.all.forEach(b=>{if(near(b.x,KNOWN))return;s+=`<circle cx="${b.x}" cy="${74+(b.t%6)*3}" r="3.4" fill="none" stroke="var(--tx)" stroke-width="1.4" opacity=".75"/>`});
+  d.conf.forEach(c=>{s+=`<circle cx="${c.x}" cy="82" r="${4+c.w*1.6}" fill="var(--bad)" stroke="#fff" stroke-width="1.5"/>`});
+  document.getElementById("map").innerHTML=s;
+  const st=[[trips,"Trips run"],[d.all.filter(b=>!near(b.x,KNOWN)).length,"Bumps felt in total"],[d.conf.length,"Confirmed defects"],[`${d.rawFalse} → ${d.confFalse}`,"False alarms: one trip alone → after confirming"],[`${d.found} / ${POT.length}`,"Real potholes found"]];
+  document.getElementById("stats").innerHTML=st.map(([n,l])=>`<div class="stat"><div class="num">${n}</div><span>${l}</span></div>`).join("");
+  const rows=[...d.secs].sort((a,b)=>b.sc-a.sc||a.i-b.i);
+  document.getElementById("rank").innerHTML=trips?rows.map(c=>`<tr><td>Section ${c.i+1} (${c.i*LEN}–${(c.i+1)*LEN} m)</td><td><span class="chip ${c.g}" style="background:${COL[c.g]}">${c.g}</span></td><td>${c.n}</td><td>${c.sc}</td></tr>`).join(""):`<tr><td colspan="4">No trips yet. Choose Add a trip to start.</td></tr>`;
+}
+document.getElementById("add").onclick=()=>{trips=Math.min(trips+1,30);render()};
+document.getElementById("run").onclick=()=>{trips=Math.min(trips+8,30);render()};
+document.getElementById("reset").onclick=()=>{trips=0;render()};
+document.getElementById("need").oninput=render;
+render();
+
+// ---- Live capture ----
+const $=id=>document.getElementById(id);
+const L={on:false,bumps:[],base:9.8,last:0,speed:null,pos:null,watch:null,synced:0};
+try{const s=JSON.parse(localStorage.getItem("kc_pending")||"[]");if(Array.isArray(s))L.bumps=s}catch(e){}
+function say(t){$("lmsg").textContent=t}
+function drawLive(){
+  $("lcount").textContent=`Waiting on phone: ${L.bumps.length}. Synced: ${L.synced}.`;
+  $("llog").innerHTML=L.bumps.length?L.bumps.slice(0,8).map(b=>`<tr><td>${b.t}${b.sim?" (test)":""}</td><td>${b.size}</td><td>${b.kmh==null?"n/a":b.kmh+" km/h"}</td><td>${b.lat==null?"no GPS":b.lat+", "+b.lon}</td></tr>`).join(""):`<tr><td colspan="4">No bumps yet.</td></tr>`;
+}
+function logBump(size,sim){
+  L.bumps.unshift({t:new Date().toLocaleTimeString(),size:+size.toFixed(1),lat:L.pos?+L.pos.latitude.toFixed(5):null,lon:L.pos?+L.pos.longitude.toFixed(5):null,kmh:L.speed==null?null:Math.round(L.speed),sim:!!sim});
+  try{localStorage.setItem("kc_pending",JSON.stringify(L.bumps))}catch(e){}
+  drawLive();
+}
+function onMotion(e){
+  const a=e.accelerationIncludingGravity;if(!a||a.x==null)return;
+  const m=Math.hypot(a.x,a.y,a.z);
+  L.base=L.base*.95+m*.05;
+  const d=Math.abs(m-L.base),kmh=L.speed,adj=d/Math.max(1,(kmh==null?30:kmh)/30);
+  $("lbar").style.width=Math.min(100,d*8)+"%";
+  $("lread").textContent=d.toFixed(1)+" m/s²";
+  const now=Date.now();
+  if(adj>=+$("lthr").value&&now-L.last>1000&&(kmh==null||kmh>=5)){L.last=now;logBump(adj,false)}
+}
+function stopLive(){
+  window.removeEventListener("devicemotion",onMotion);
+  if(L.watch!=null&&navigator.geolocation)navigator.geolocation.clearWatch(L.watch);
+  L.watch=null;L.on=false;$("lstart").textContent="Start live capture";say("Capture stopped.");
+}
+async function startLive(){
+  if(L.on){stopLive();return}
+  try{
+    if(!window.isSecureContext){say("This page is not on a secure https link, so the browser blocks motion sensors. Open the published link instead of a saved file.");return}
+    if(!("DeviceMotionEvent" in window)){say("This device has no motion sensor. Use Simulate a bump.");return}
+    if(typeof DeviceMotionEvent.requestPermission==="function"){
+      if(await DeviceMotionEvent.requestPermission()!=="granted"){say("Motion access was denied. Allow it in the browser settings, or use Simulate a bump.");return}
+    }
+    window.addEventListener("devicemotion",onMotion);
+    if(navigator.geolocation)L.watch=navigator.geolocation.watchPosition(p=>{L.pos=p.coords;L.speed=p.coords.speed==null?null:p.coords.speed*3.6;$("lspd").textContent=L.speed==null?"no speed":Math.round(L.speed)+" km/h"},()=>say("Location is unavailable, so bumps are saved without a position."),{enableHighAccuracy:true});
+    L.on=true;$("lstart").textContent="Stop capture";say("Capturing. Keep the phone fixed in a holder while you ride or drive.");
+  }catch(e){say("Sensors are blocked on this page. Open the page link directly in your phone browser, or use Simulate a bump.")}
+}
+$("lstart").onclick=startLive;
+$("lsim").onclick=()=>logBump(4+Math.random()*4,true);
+$("lthr").oninput=()=>{$("lthrv").textContent=$("lthr").value};
+$("lsync").onclick=()=>{
+  const n=L.bumps.length;if(!n){say("Nothing to sync yet.");return}
+  L.synced+=n;L.bumps=[];try{localStorage.removeItem("kc_pending")}catch(e){}
+  say(`Synced ${n} bump${n>1?"s":""} to the LGU map (simulated, nothing leaves this phone).`);drawLive();
+};
+drawLive();
+</script>
+</body>
+</html>
